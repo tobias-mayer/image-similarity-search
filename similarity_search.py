@@ -4,7 +4,6 @@ import cv2
 import pandas as pd
 import joblib
 
-from sklearn.metrics.pairwise import cosine_similarity
 from pandas.core.common import flatten
 
 import torch
@@ -57,22 +56,23 @@ def get_embedding(model, file_name):
     ) # default values used on imagenet
     to_tensor = transforms.ToTensor()
 
-    transformed_img = torch.Tensor(
-        standardize(to_tensor(scale(img)).unsqueeze(0))
-    )
+    transformed_img = torch.Tensor(standardize(to_tensor(scale(img))).unsqueeze(0))
 
     embedding = torch.zeros(EMBEDDING_SIZE)
 
-    def copy_layer(_, __, output):
-        embedding.copy_(output.data.reshape(output.data.size(1)))
+    def copy_layer(model, input, output):
+        embedding.copy_(output.data.reshape(EMBEDDING_SIZE))
 
     pooling_layer = model._modules.get('avgpool')
     attached_layer = pooling_layer.register_forward_hook(copy_layer)
     model(transformed_img)
-
     attached_layer.remove()
 
     return embedding
+
+
+def get_similarity(embedding1, embedding2):
+    return nn.CosineSimilarity()(embedding1, embedding2)
 
 
 if __name__ == '__main__':
@@ -81,16 +81,26 @@ if __name__ == '__main__':
     image_name = df.iloc[0].image
     image = load_image(image_name)
 
-    figures = {'im'+str(i): load_image(row.image) for i, row in df.sample(6).iterrows()}
-    show_images(figures, 2, 3, filename='output/testimages.png')
-
-    resnet = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
+    resnet = models.resnet18(weights=models.ResNet18_Weights.IMAGENET1K_V1)
     summarize_model(resnet) 
 
 
-    sample_embedding = get_embedding(resnet, df.iloc[0].image)
-    print(sample_embedding)
+    embedding1 = get_embedding(resnet, df.iloc[1].image).reshape((1, -1))
+    embedding2 = get_embedding(resnet, df.iloc[1000].image).reshape((1, -1))
 
-    
+    figures = {'im'+str(i): load_image(row.image) for i, row in df.iloc[[1, 1000]].iterrows()}
+    show_images(figures, 1, 2, filename='output/testimages.png')
 
+    cos_sim = get_similarity(embedding1, embedding2)
+    print(f'cosine similarity: {cos_sim}')
+
+
+    import swifter
+ 
+    partial_df = df[:5000]
+    embeddings = partial_df['image'].swifter.apply(lambda img: get_embedding(resnet, img))
+
+    embeddings = embeddings.apply(pd.Series)
+    print(embeddings.shape)
+    df_embs.head()
 
