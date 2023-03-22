@@ -1,10 +1,12 @@
+import os.path
+
 import numpy as np
 import cv2
-
 import pandas as pd
-import joblib
-
 from pandas.core.common import flatten
+
+import joblib
+import swifter
 
 import torch
 import torch.nn as nn
@@ -20,11 +22,13 @@ IMAGE_HEIGHT = 224
 CHANNELS = 3
 EMBEDDING_SIZE = 512
 
+device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
 def prepare_data():
     df = pd.read_csv('./dataset/styles.csv', on_bad_lines='skip')
     df['image'] = df.apply(lambda row: str(row['id']) + ".jpg", axis=1)
     df = df.reset_index(drop=True)
+    df[[os.path.isfile(i) for i in df['image']]]
 
     return df
 
@@ -45,9 +49,9 @@ def summarize_model(model):
 def get_embedding(model, file_name):
     try:
         img = Image.open(get_image_path(file_name)).convert('RGB') 
-    except FileNotFoundError:
+    except:
         print(f'image not found: {file_name}')
-        raise
+        return
 
     scale = transforms.Resize((IMAGE_HEIGHT, IMAGE_WIDTH))
     standardize = transforms.Normalize(
@@ -56,7 +60,8 @@ def get_embedding(model, file_name):
     ) # default values used on imagenet
     to_tensor = transforms.ToTensor()
 
-    transformed_img = torch.Tensor(standardize(to_tensor(scale(img))).unsqueeze(0))
+    transformed_img = standardize(to_tensor(scale(img))).unsqueeze(0)
+    transformed_img = transformed_img.to(device)
 
     embedding = torch.zeros(EMBEDDING_SIZE)
 
@@ -82,8 +87,7 @@ if __name__ == '__main__':
     image = load_image(image_name)
 
     resnet = models.resnet18(weights=models.ResNet18_Weights.IMAGENET1K_V1)
-    summarize_model(resnet) 
-
+    resnet.to(device)
 
     embedding1 = get_embedding(resnet, df.iloc[1].image).reshape((1, -1))
     embedding2 = get_embedding(resnet, df.iloc[1000].image).reshape((1, -1))
@@ -95,12 +99,9 @@ if __name__ == '__main__':
     print(f'cosine similarity: {cos_sim}')
 
 
-    import swifter
- 
-    partial_df = df[:5000]
-    embeddings = partial_df['image'].swifter.apply(lambda img: get_embedding(resnet, img))
-
+    # todo: run in batches
+    embeddings = df['image'].swifter.apply(lambda img: get_embedding(resnet, img))
     embeddings = embeddings.apply(pd.Series)
-    print(embeddings.shape)
-    df_embs.head()
+
+    joblib.dump(embeddings, 'output/embeddings.pkl', 9)
 
