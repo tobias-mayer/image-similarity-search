@@ -1,9 +1,7 @@
 import os.path
 
 import numpy as np
-import cv2
 import pandas as pd
-from pandas.core.common import flatten
 
 import joblib
 import swifter
@@ -15,7 +13,7 @@ import torchvision.transforms as transforms
 
 from PIL import Image
 
-from visualizations import *
+from common import *
 
 IMAGE_WIDTH = 224
 IMAGE_HEIGHT = 224
@@ -24,34 +22,13 @@ EMBEDDING_SIZE = 512
 
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
-def prepare_data():
-    df = pd.read_csv('./dataset/styles.csv', on_bad_lines='skip')
-    df['image'] = df.apply(lambda row: str(row['id']) + ".jpg", axis=1)
-    df = df.reset_index(drop=True)
-    df[[os.path.isfile(i) for i in df['image']]]
 
-    return df
-
-
-def get_image_path(file_name):
-    return f'./dataset/images/{file_name}'
-
-
-def load_image(file_name):
-    return cv2.imread(get_image_path(file_name))
-
-
-def summarize_model(model):
-    from torchsummary import summary
-    summary(resnet, (CHANNELS, IMAGE_HEIGHT, IMAGE_WIDTH))
-
-
-def get_embedding(model, file_name):
+def get_embedding(model, filepath):
     try:
-        img = Image.open(get_image_path(file_name)).convert('RGB') 
+        img = Image.open(filepath).convert('RGB') 
     except:
-        print(f'image not found: {file_name}')
-        return
+        print(f'image not found: {filepath}')
+        return torch.zeros(EMBEDDING_SIZE)
 
     scale = transforms.Resize((IMAGE_HEIGHT, IMAGE_WIDTH))
     standardize = transforms.Normalize(
@@ -86,11 +63,10 @@ if __name__ == '__main__':
     image_name = df.iloc[0].image
     image = load_image(image_name)
 
-    resnet = models.resnet18(weights=models.ResNet18_Weights.IMAGENET1K_V1)
-    resnet.to(device)
+    model = get_model(device)
 
-    embedding1 = get_embedding(resnet, df.iloc[1].image).reshape((1, -1))
-    embedding2 = get_embedding(resnet, df.iloc[1000].image).reshape((1, -1))
+    embedding1 = get_embedding(model, get_image_path(df.iloc[1].image)).reshape((1, -1))
+    embedding2 = get_embedding(model, get_image_path(df.iloc[1000].image)).reshape((1, -1))
 
     figures = {'im'+str(i): load_image(row.image) for i, row in df.iloc[[1, 1000]].iterrows()}
     show_images(figures, 1, 2, filename='output/testimages.png')
@@ -100,7 +76,7 @@ if __name__ == '__main__':
 
 
     # todo: run in batches
-    embeddings = df['image'].swifter.apply(lambda img: get_embedding(resnet, img))
+    embeddings = df['image'].swifter.apply(lambda img: get_embedding(model, get_image_path(img)))
     embeddings = embeddings.apply(pd.Series)
 
     joblib.dump(embeddings, 'output/embeddings.pkl', 9)
