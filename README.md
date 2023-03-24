@@ -16,3 +16,7 @@ Example 2:
 1. **Feature extraction**: A pre-trained Resnet18 CNN is used in order to extract a 512-dimensional feature vector of an image. This is done for all images included in the dataset. The extracted features are stored on disk for later use.
 2. **Indexing**: Currently, the images with the highest similarity are being located through a linear search. This could be optimized through the use of an inverted index, k-d trees, or locality sensitive hashing for large datasets.
 3. **Querying and Ranking**: The index can be applied to find analogous images to the query image by looking up images with alike embeddings. Finally, the retrieved images can be ranked based on their similarity to the query image using metrics such as euclidean distance or cosine similarity.
+
+## References
+
+Kuo, Chien-Hao, Yang-Ho Chou and Pao-Chi Chang. “Using Deep Convolutional Neural Networks for Image Retrieval.” Visual Information Processing and Communication (2016). [LINK](http://vaplab.ee.ncu.edu.tw/english/pcchang/pdf/c125.pdf)
